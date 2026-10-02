@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>O mapa partidário do poder local</title>
+<style>
+  :root{
+    --surface-1:#fcfcfb;
+    --page:#f9f9f7;
+    --text-primary:#0b0b0b;
+    --text-secondary:#52514e;
+    --muted:#898781;
+    --gridline:#e1e0d9;
+    --baseline:#c3c2b7;
+    --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6;   /* azul — coligação / magnitude */
+    --series-2:#eb6834;   /* laranja — partido isolado */
+    --series-3:#1baf7a;   /* verde-água — federação */
+    --seq-100:#cde2fb;
+    --seq-150:#b7d3f6;
+    --seq-250:#86b6ef;
+    --seq-350:#5598e7;
+    --seq-450:#2a78d6;
+    --seq-550:#1c5cab;
+    --seq-650:#104281;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--page);
+    color:var(--text-primary);
+    font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:28px 16px 64px;}
+  header.hero{padding:8px 0 28px;border-bottom:1px solid var(--gridline);margin-bottom:28px;}
+  .kicker{
+    text-transform:uppercase;letter-spacing:.06em;font-size:12.5px;font-weight:600;
+    color:var(--series-1);margin:0 0 10px;
+  }
+  h1{font-size:clamp(24px,4.4vw,34px);line-height:1.18;margin:0 0 14px;font-weight:700;letter-spacing:-0.01em;}
+  .lede{font-size:16.5px;color:var(--text-secondary);margin:0;max-width:640px;}
+  .card{
+    background:var(--surface-1);border:1px solid var(--border);border-radius:14px;
+    padding:24px clamp(16px,4vw,32px);margin-bottom:24px;
+  }
+  .card h2{font-size:20px;margin:0 0 6px;font-weight:700;letter-spacing:-0.01em;}
+  .card .question{font-size:13.5px;color:var(--muted);margin:0 0 18px;font-weight:500;}
+  .caption{font-size:14.5px;color:var(--text-secondary);margin:14px 0 0;max-width:620px;}
+  .hero-figure-row{display:flex;flex-wrap:wrap;gap:28px;align-items:center;margin-top:4px;}
+  .hero-figure{font-size:clamp(52px,10vw,76px);font-weight:800;color:var(--series-1);line-height:1;letter-spacing:-0.02em;}
+  .hero-support{max-width:420px;}
+  .hero-support p{margin:0;font-size:15.5px;color:var(--text-secondary);}
+  .hero-support strong{color:var(--text-primary);}
+
+  .toolbar{display:flex;justify-content:flex-end;margin-bottom:4px;}
+  button.toggle{
+    font:inherit;font-size:13px;font-weight:600;color:var(--series-1);
+    background:transparent;border:1px solid var(--series-1);border-radius:999px;
+    padding:6px 14px;cursor:pointer;
+  }
+  button.toggle:hover{background:rgba(42,120,214,0.08);}
+  button.toggle:focus-visible{outline:2px solid var(--series-1);outline-offset:2px;}
+
+  .chartbox{overflow-x:auto;}
+  svg{display:block;width:100%;height:auto;}
+  .axis-label,.cat-label{fill:var(--text-secondary);font-size:12.5px;}
+  .value-label{fill:var(--text-primary);font-size:12.5px;font-weight:600;}
+  .grid-line{stroke:var(--gridline);stroke-width:1;}
+  .mark{cursor:pointer;}
+  .mark:focus-visible{outline:2px solid var(--text-primary);outline-offset:2px;}
+
+  table.data-table{
+    width:100%;border-collapse:collapse;font-size:13.5px;margin-top:4px;display:block;overflow-x:auto;
+  }
+  table.data-table thead th{
+    text-align:left;color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;
+    letter-spacing:.03em;border-bottom:1px solid var(--gridline);padding:8px 10px;white-space:nowrap;
+  }
+  table.data-table td{padding:7px 10px;border-bottom:1px solid var(--gridline);font-variant-numeric:tabular-nums;white-space:nowrap;}
+  table.data-table tbody tr:last-child td{border-bottom:none;}
+
+  .is-hidden{display:none !important;}
+
+  .legend{display:flex;flex-wrap:wrap;gap:16px;margin-top:16px;}
+  .legend-item{display:flex;align-items:center;gap:7px;font-size:13.5px;color:var(--text-secondary);}
+  .swatch{width:12px;height:12px;border-radius:3px;flex:none;}
+
+  .champ-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-top:18px;}
+  .champ-card{
+    border-left:3px solid var(--series-1);background:var(--page);border-radius:8px;
+    padding:12px 14px;
+  }
+  .champ-region{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:600;}
+  .champ-party{font-size:19px;font-weight:700;margin:4px 0 2px;}
+  .champ-pct{font-size:13.5px;color:var(--text-secondary);}
+
+  .scale-legend{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:12.5px;color:var(--text-secondary);}
+  .scale-grad{flex:1;max-width:220px;height:10px;border-radius:5px;
+    background:linear-gradient(to right,var(--seq-100),var(--seq-150),var(--seq-250),var(--seq-350),var(--seq-450),var(--seq-550),var(--seq-650));
+  }
+
+  .stat-tile-row{display:flex;flex-wrap:wrap;gap:16px;margin-top:4px;}
+  .stat-tile{background:var(--page);border-radius:10px;padding:14px 16px;min-width:200px;flex:1;}
+  .stat-tile .label{font-size:12.5px;color:var(--muted);margin-bottom:4px;}
+  .stat-tile .value{font-size:26px;font-weight:700;color:var(--text-primary);}
+  .stat-tile .sub{font-size:12.5px;color:var(--text-secondary);margin-top:3px;}
+
+  footer.synthesis{margin-top:8px;padding-top:4px;}
+  footer.synthesis p{font-size:16px;color:var(--text-primary);max-width:680px;}
+  footer.synthesis .source{font-size:12.5px;color:var(--muted);margin-top:28px;}
+
+  #tooltip{
+    position:fixed;pointer-events:none;background:var(--text-primary);color:#fff;
+    font-size:12.5px;padding:7px 10px;border-radius:7px;max-width:220px;
+    transform:translate(-50%,-115%);opacity:0;transition:opacity .08s ease;z-index:50;
+    line-height:1.35;
+  }
+  #tooltip.show{opacity:1;}
+  #tooltip strong{display:block;margin-bottom:2px;}
+
+  @media (max-width:520px){
+    .hero-figure{font-size:60px;}
+  }
+</style>
+</head>
+<body>
+<div id="tooltip" role="tooltip" aria-hidden="true"></div>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="kicker">Eleições municipais 2024 · Brasil</p>
+    <h1>O poder municipal brasileiro não tem dono — tem 5 donos, um por região</h1>
+    <p class="lede">Entre os 5.553 prefeitos eleitos em 2024, nenhum partido chega perto de controlar o país: o maior deles governa 1 em cada 6 cidades, e cada grande região tem o seu próprio "rei" local. Quase ninguém vence sozinho — a maioria depende de coligações amplas.</p>
+  </header>
+
+  <!-- SEÇÃO 1 — RANKING -->
+  <section class="card" aria-labelledby="t1">
+    <h2 id="t1">Nenhum partido chega a 1 em cada 6 prefeituras</h2>
+    <p class="question">Qual partido tem mais prefeituras eleitas, e qual é o tamanho real dessa liderança?</p>
+
+    <div class="hero-figure-row">
+      <div class="hero-figure">16%</div>
+      <div class="hero-support">
+        <p><strong>O PSD</strong> é o partido com mais prefeitos eleitos no Brasil em 2024 — <strong>890 de 5.553</strong> municípios. Ainda assim, isso é só uma em cada seis prefeituras do país.</p>
+      </div>
+    </div>
+
+    <div class="toolbar">
+      <button class="toggle" data-target="rank" aria-pressed="false">Ver como tabela</button>
+    </div>
+    <div class="chartbox" id="rank-chart"></div>
+    <table class="data-table is-hidden" id="rank-table">
+      <thead><tr><th>Partido</th><th>Prefeituras</th><th>% do total</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p class="caption">Os 10 maiores partidos somam 90,6% das prefeituras do país — mas estão longe de ser um bloco único: entre o 1º (PSD, 16,0%) e o 10º (PDT, 2,7%) colocado não há um salto, e sim uma rampa suave. "Outros" agrega 14 partidos menores, cada um com uma fração pequena do total.</p>
+  </section>
+
+  <!-- SEÇÃO 2 — MAPA REGIONAL -->
+  <section class="card" aria-labelledby="t2">
+    <h2 id="t2">Cada região tem o seu próprio campeão</h2>
+    <p class="question">Existe um "partido dono" do país, ou o padrão se repete em cada região?</p>
+
+    <div class="toolbar">
+      <button class="toggle" data-target="heat" aria-pressed="false">Ver como tabela</button>
+    </div>
+    <div class="chartbox" id="heat-chart"></div>
+    <table class="data-table is-hidden" id="heat-table">
+      <thead><tr><th>Região</th><th>Partido</th><th>% das prefeituras da região</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="scale-legend">
+      <span>0%</span><div class="scale-grad" role="img" aria-label="Escala de cor de 0% a 33%, do mais claro ao mais escuro"></div><span>33%</span>
+    </div>
+
+    <div class="champ-grid">
+      <div class="champ-card"><div class="champ-region">Norte</div><div class="champ-party">MDB</div><div class="champ-pct">24,7% · 111 de 449 municípios</div></div>
+      <div class="champ-card"><div class="champ-region">Nordeste</div><div class="champ-party">MDB</div><div class="champ-pct">15,7% · 282 de 1.791 municípios</div></div>
+      <div class="champ-card"><div class="champ-region">Centro-Oeste</div><div class="champ-party">União</div><div class="champ-pct">33,2% · 155 de 467 municípios</div></div>
+      <div class="champ-card"><div class="champ-region">Sudeste</div><div class="champ-party">PSD</div><div class="champ-pct">21,4% · 355 de 1.656 municípios</div></div>
+      <div class="champ-card"><div class="champ-region">Sul</div><div class="champ-party">PP</div><div class="champ-pct">23,4% · 278 de 1.190 municípios</div></div>
+    </div>
+    <p class="caption">No Centro-Oeste, o União venceu 1 em cada 3 prefeituras — a maior concentração regional de qualquer partido no país. Já no Nordeste, a região mais fragmentada, nem o líder (MDB) passa de 1 em cada 6 municípios.</p>
+  </section>
+
+  <!-- SEÇÃO 3 — COLIGAÇÕES -->
+  <section class="card" aria-labelledby="t3">
+    <h2 id="t3">Ganhar sozinho é raro</h2>
+    <p class="question">Os prefeitos venceram sozinhos ou dependeram de coligações?</p>
+
+    <div class="toolbar">
+      <button class="toggle" data-target="stack" aria-pressed="false">Ver como tabela</button>
+    </div>
+    <div class="chartbox" id="stack-chart"></div>
+    <table class="data-table is-hidden" id="stack-table">
+      <thead><tr><th>Forma de disputa</th><th>Prefeituras</th><th>% do total</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="legend" id="stack-legend"></div>
+
+    <div class="stat-tile-row">
+      <div class="stat-tile">
+        <div class="label">Partidos por coligação vencedora, em média</div>
+        <div class="value">4,4</div>
+        <div class="sub">Uma única chapa reuniu até 18 partidos diferentes.</div>
+      </div>
+      <div class="stat-tile">
+        <div class="label">Prefeituras vencidas por um único partido, sem aliança</div>
+        <div class="value">5,0%</div>
+        <div class="sub">278 de 5.553 municípios.</div>
+      </div>
+    </div>
+    <p class="caption">94,3% das prefeituras foram vencidas por coligações — alianças entre partidos, não disputas de legenda única. Vencer sem aliar-se a ninguém é a exceção, não a regra.</p>
+  </section>
+
+  <footer class="synthesis card">
+    <p><strong>O poder municipal no Brasil não é centralizado — é fragmentado e regionalizado.</strong> O maior partido do país governa apenas 1 em cada 6 cidades; cada região elege o seu próprio líder local; e quase toda vitória nasce de uma coligação ampla, com em média 4 a 5 partidos na mesma chapa. Quem manda nos municípios brasileiros não é uma legenda nacional — são alianças pragmáticas, construídas região por região.</p>
+    <p class="source">Fonte: TSE/IBGE, eleições municipais de 2024 — base <code>dados/eleitos.csv</code>, filtrada para <code>cargo = Prefeito</code> (5.553 prefeitos, 5.553 municípios). Consolidação de referência: 01/10/2026.</p>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- dados agregados (de dados/eleitos.csv, cargo = Prefeito) ----------
+  var RANKING = [
+    {p:"PSD", n:890, pct:16.0},
+    {p:"MDB", n:860, pct:15.5},
+    {p:"PP", n:750, pct:13.5},
+    {p:"União", n:589, pct:10.6},
+    {p:"PL", n:517, pct:9.3},
+    {p:"Republicanos", n:437, pct:7.9},
+    {p:"PSB", n:311, pct:5.6},
+    {p:"PSDB", n:275, pct:5.0},
+    {p:"PT", n:252, pct:4.5},
+    {p:"PDT", n:151, pct:2.7},
+    {p:"Outros (14 partidos)", n:521, pct:9.4, other:true}
+  ];
+
+  var REGIONS = ["Norte","Nordeste","Centro-Oeste","Sudeste","Sul"];
+  var REGION_TOTAL = {"Norte":449,"Nordeste":1791,"Centro-Oeste":467,"Sudeste":1656,"Sul":1190};
+  var PARTIES8 = ["PSD","MDB","PP","União","PL","Republicanos","PSB","PSDB"];
+  var HEAT = {
+    "Norte":        {PSD:7.8, MDB:24.7, PP:13.1, "União":22.5, PL:4.7,  Republicanos:18.3, PSB:0.4,  PSDB:0.7},
+    "Nordeste":     {PSD:15.4,MDB:15.7, PP:11.9, "União":8.6,  PL:4.4,  Republicanos:6.9,  PSB:11.9, PSDB:4.2},
+    "Centro-Oeste": {PSD:1.7, MDB:16.1, PP:9.9,  "União":33.2, PL:11.3, Republicanos:3.0,  PSB:4.1,  PSDB:11.6},
+    "Sudeste":      {PSD:21.4,MDB:10.1, PP:9.2,  "União":7.2,  PL:11.2, Republicanos:10.9, PSB:3.3,  PSDB:5.1},
+    "Sul":          {PSD:18.2,MDB:18.9, PP:23.4, "União":5.0,  PL:15.0, Republicanos:3.0,  PSB:1.8,  PSDB:4.8}
+  };
+
+  var COALITION = [
+    {label:"Coligação", n:5238, pct:94.3, color:"var(--series-1)"},
+    {label:"Partido isolado", n:278, pct:5.0, color:"var(--series-2)"},
+    {label:"Federação", n:37, pct:0.7, color:"var(--series-3)"}
+  ];
+
+  var SVGNS = "http://www.w3.org/2000/svg";
+  function el(tag, attrs){
+    var e = document.createElementNS(SVGNS, tag);
+    for (var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function fmtInt(n){ return n.toLocaleString("pt-BR"); }
+  function fmtPct(n){ return n.toLocaleString("pt-BR", {minimumFractionDigits:1, maximumFractionDigits:1}) + "%"; }
+
+  // -------- tooltip --------
+  var tooltip = document.getElementById("tooltip");
+  function showTooltip(evt, html){
+    tooltip.innerHTML = html;
+    tooltip.classList.add("show");
+    tooltip.setAttribute("aria-hidden","false");
+    moveTooltip(evt);
+  }
+  function moveTooltip(evt){
+    var x = evt.clientX, y = evt.clientY;
+    if (evt.target && evt.target.getBoundingClientRect && evt.type === "focus"){
+      var r = evt.target.getBoundingClientRect();
+      x = r.left + r.width/2; y = r.top;
+    }
+    tooltip.style.left = x + "px";
+    tooltip.style.top = y + "px";
+  }
+  function hideTooltip(){
+    tooltip.classList.remove("show");
+    tooltip.setAttribute("aria-hidden","true");
+  }
+  function wireMark(node, html){
+    node.addEventListener("mousemove", function(e){ showTooltip(e, html); });
+    node.addEventListener("mouseleave", hideTooltip);
+    node.addEventListener("focus", function(e){ showTooltip(e, html); });
+    node.addEventListener("blur", hideTooltip);
+    node.setAttribute("tabindex","0");
+    node.classList.add("mark");
+  }
+
+  // -------- table toggle --------
+  document.querySelectorAll("button.toggle").forEach(function(btn){
+    btn.addEventListener("click", function(){
+      var key = btn.getAttribute("data-target");
+      var chart = document.getElementById(key + "-chart");
+      var table = document.getElementById(key + "-table");
+      var showingTable = !table.classList.contains("is-hidden");
+      if (showingTable){
+        table.classList.add("is-hidden");
+        chart.classList.remove("is-hidden");
+        btn.textContent = "Ver como tabela";
+        btn.setAttribute("aria-pressed","false");
+      } else {
+        table.classList.remove("is-hidden");
+        chart.classList.add("is-hidden");
+        btn.textContent = "Ver como gráfico";
+        btn.setAttribute("aria-pressed","true");
+      }
+    });
+  });
+
+  // ---------- gráfico 1: ranking em barras horizontais ----------
+  function hBarPath(x, y, w, h, r){
+    r = Math.min(r, h/2, Math.max(w,0.01));
+    if (w <= r) { return "M"+x+","+y+" h"+w+" v"+h+" h"+(-w)+" Z"; }
+    return [
+      "M", x, y,
+      "H", x+w-r,
+      "Q", x+w, y, x+w, y+r,
+      "V", y+h-r,
+      "Q", x+w, y+h, x+w-r, y+h,
+      "H", x,
+      "Z"
+    ].join(" ");
+  }
+
+  function buildRanking(){
+    var W = 820, rowH = 34, barH = 20, left = 150, right = 110, top = 10;
+    var plotW = W - left - right;
+    var maxPct = Math.max.apply(null, RANKING.map(function(d){return d.pct;}));
+    var H = top + RANKING.length * rowH + 30;
+    var svg = el("svg", {viewBox:"0 0 "+W+" "+H, role:"img", "aria-label":"Ranking de partidos por número de prefeituras eleitas"});
+
+    // gridlines a cada 5%
+    var ticks = [0,5,10,15];
+    ticks.forEach(function(t){
+      var x = left + (t/maxPct)*plotW;
+      svg.appendChild(el("line", {x1:x,y1:top-2,x2:x,y2:top+RANKING.length*rowH, class:"grid-line"}));
+      var lab = el("text", {x:x, y: top+RANKING.length*rowH+18, class:"axis-label", "text-anchor":"middle"});
+      lab.textContent = t + "%";
+      svg.appendChild(lab);
+    });
+
+    RANKING.forEach(function(d, i){
+      var y = top + i*rowH;
+      var w = (d.pct/maxPct)*plotW;
+      var color = d.other ? "var(--muted)" : "var(--series-1)";
+      var path = el("path", {d:hBarPath(left, y+(rowH-barH)/2, w, barH, 4), fill:color});
+      wireMark(path, "<strong>"+d.p+"</strong>"+fmtInt(d.n)+" prefeituras · "+fmtPct(d.pct)+" do total");
+      svg.appendChild(path);
+
+      var catLabel = el("text", {x:left-10, y:y+rowH/2+4, class:"cat-label", "text-anchor":"end"});
+      catLabel.textContent = d.p;
+      svg.appendChild(catLabel);
+
+      var valLabel = el("text", {x:left+w+8, y:y+rowH/2+4, class:"value-label"});
+      valLabel.textContent = fmtPct(d.pct) + "  ·  " + fmtInt(d.n);
+      svg.appendChild(valLabel);
+    });
+
+    document.getElementById("rank-chart").appendChild(svg);
+
+    var tbody = document.querySelector("#rank-table tbody");
+    RANKING.forEach(function(d){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>"+d.p+"</td><td>"+fmtInt(d.n)+"</td><td>"+fmtPct(d.pct)+"</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  // ---------- gráfico 2: heatmap região x partido ----------
+  var SEQ_STEPS = [
+    {max:2,   color:"var(--seq-100)", dark:false},
+    {max:6,   color:"var(--seq-150)", dark:false},
+    {max:10,  color:"var(--seq-250)", dark:false},
+    {max:14,  color:"var(--seq-350)", dark:false},
+    {max:19,  color:"var(--seq-450)", dark:true},
+    {max:25,  color:"var(--seq-550)", dark:true},
+    {max:999, color:"var(--seq-650)", dark:true}
+  ];
+  function seqColor(v){
+    for (var i=0;i<SEQ_STEPS.length;i++){ if (v <= SEQ_STEPS[i].max) return SEQ_STEPS[i]; }
+    return SEQ_STEPS[SEQ_STEPS.length-1];
+  }
+
+  function buildHeatmap(){
+    var cell = 62, cellH = 38, left = 108, top = 34;
+    var W = left + PARTIES8.length*cell + 10;
+    var H = top + REGIONS.length*cellH + 6;
+    var svg = el("svg", {viewBox:"0 0 "+W+" "+H, role:"img", "aria-label":"Mapa de calor: percentual de prefeituras de cada região vencidas por cada partido"});
+
+    PARTIES8.forEach(function(p, c){
+      var x = left + c*cell + cell/2;
+      var lab = el("text", {x:x, y: top-12, class:"cat-label", "text-anchor":"middle"});
+      lab.textContent = p;
+      svg.appendChild(lab);
+    });
+
+    REGIONS.forEach(function(r, ri){
+      var y = top + ri*cellH;
+      var rlab = el("text", {x:left-10, y:y+cellH/2+4, class:"cat-label", "text-anchor":"end"});
+      rlab.textContent = r;
+      svg.appendChild(rlab);
+
+      PARTIES8.forEach(function(p, ci){
+        var x = left + ci*cell;
+        var v = HEAT[r][p];
+        var step = seqColor(v);
+        var rect = el("rect", {x:x+1, y:y+1, width:cell-2, height:cellH-2, rx:3, fill:step.color});
+        wireMark(rect, "<strong>"+r+" · "+p+"</strong>"+fmtPct(v)+" das prefeituras da região");
+        svg.appendChild(rect);
+
+        var txt = el("text", {
+          x:x+cell/2, y:y+cellH/2+4, "text-anchor":"middle",
+          style:"font-size:12px;font-weight:600;fill:"+(step.dark ? "#ffffff" : "#0b0b0b")+";pointer-events:none;"
+        });
+        txt.textContent = v.toFixed(1);
+        svg.appendChild(txt);
+      });
+    });
+
+    document.getElementById("heat-chart").appendChild(svg);
+
+    var tbody = document.querySelector("#heat-table tbody");
+    REGIONS.forEach(function(r){
+      PARTIES8.forEach(function(p){
+        var tr = document.createElement("tr");
+        tr.innerHTML = "<td>"+r+"</td><td>"+p+"</td><td>"+fmtPct(HEAT[r][p])+"</td>";
+        tbody.appendChild(tr);
+      });
+    });
+  }
+
+  // ---------- gráfico 3: barra empilhada (coligação) ----------
+  function buildStack(){
+    var W = 820, H = 70, barY = 14, barH = 40, gap = 2;
+    var svg = el("svg", {viewBox:"0 0 "+W+" "+H, role:"img", "aria-label":"Participação de coligações, partidos isolados e federações nas vitórias municipais"});
+
+    var x = 0;
+    COALITION.forEach(function(d, i){
+      var w = (d.pct/100)*W;
+      var segW = w - (i>0 && i<COALITION.length-1 ? gap : gap/2);
+      segW = Math.max(segW, 1);
+      var isFirst = i===0, isLast = i===COALITION.length-1;
+      var path;
+      if (isFirst){
+        path = ["M",x,barY, "H",x+segW, "V",barY+barH, "H",x+4, "Q",x,barY+barH,x,barY+barH-4, "V",barY+4, "Q",x,barY,x+4,barY,"Z"].join(" ");
+      } else if (isLast){
+        path = ["M",x,barY, "H",x+segW-4, "Q",x+segW,barY,x+segW,barY+4, "V",barY+barH-4, "Q",x+segW,barY+barH,x+segW-4,barY+barH, "H",x, "Z"].join(" ");
+      } else {
+        path = ["M",x,barY,"H",x+segW,"V",barY+barH,"H",x,"Z"].join(" ");
+      }
+      var seg = el("path", {d:path, fill:d.color});
+      wireMark(seg, "<strong>"+d.label+"</strong>"+fmtInt(d.n)+" prefeituras · "+fmtPct(d.pct));
+      svg.appendChild(seg);
+      x += w + gap;
+    });
+
+    document.getElementById("stack-chart").appendChild(svg);
+
+    var legend = document.getElementById("stack-legend");
+    COALITION.forEach(function(d){
+      var item = document.createElement("div");
+      item.className = "legend-item";
+      item.innerHTML = '<span class="swatch" style="background:'+d.color+'"></span>'+d.label+" — "+fmtPct(d.pct)+" ("+fmtInt(d.n)+")";
+      legend.appendChild(item);
+    });
+
+    var tbody = document.querySelector("#stack-table tbody");
+    COALITION.forEach(function(d){
+      var tr = document.createElement("tr");
+      tr.innerHTML = "<td>"+d.label+"</td><td>"+fmtInt(d.n)+"</td><td>"+fmtPct(d.pct)+"</td>";
+      tbody.appendChild(tr);
+    });
+  }
+
+  buildRanking();
+  buildHeatmap();
+  buildStack();
+})();
+</script>
+</body>
+</html>
