@@ -1,0 +1,16 @@
+# Galeria gerada pelo workflow (não versionar)
+/index.html
+/_site/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Sistema operacional e editores
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*
+.vscode/
+.idea/

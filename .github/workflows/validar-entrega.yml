@@ -1,0 +1,174 @@
+name: Validar entrega
+
+# pull_request_target (e não pull_request) porque os PRs vêm de forks:
+# com pull_request o token é somente leitura e o workflow não consegue comentar no PR.
+# Segurança: este workflow NÃO faz checkout nem executa o código do PR.
+# Os arquivos do aluno são apenas lidos como texto pela API do GitHub.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: validar-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  validar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verificar arquivos da entrega
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARCADOR = '<!-- validacao-entrega -->';
+            const OBRIGATORIOS = ['claude.md', 'skill.md', 'prompts.md', 'dashboard.html'];
+            const PADRAO_PASTA = /^[a-z0-9]+(-[a-z0-9]+)+$/;
+
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+            const erros = [];
+            const avisos = [];
+
+            // ---------- 1. Arquivos alterados no PR ----------
+            const arquivos = await github.paginate(github.rest.pulls.listFiles, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+            const caminhos = new Set();
+            for (const a of arquivos) {
+              caminhos.add(a.filename);
+              if (a.previous_filename) caminhos.add(a.previous_filename);
+            }
+
+            const fora = [];
+            const noModelo = [];
+            const pastas = new Set();
+            for (const c of caminhos) {
+              const partes = c.split('/');
+              if (partes[0] !== 'entregas' || partes.length < 3) { fora.push(c); continue; }
+              if (partes[1] === '_modelo') { noModelo.push(c); continue; }
+              pastas.add(partes[1]);
+            }
+
+            if (fora.length) {
+              erros.push(
+                'Seu PR altera arquivos **fora da pasta `entregas/<seu-nome>/`**. ' +
+                'Desfaça essas alterações no seu fork (ou apague esses arquivos), deixando só a sua pasta:\n' +
+                fora.map(f => `  - \`${f}\``).join('\n')
+              );
+            }
+            if (noModelo.length) {
+              erros.push(
+                'Seu PR altera a **pasta de modelo `entregas/_modelo/`**, que deve ficar intacta. ' +
+                'Copie o modelo para uma pasta com o seu nome e desfaça as mudanças no modelo:\n' +
+                noModelo.map(f => `  - \`${f}\``).join('\n')
+              );
+            }
+            if (pastas.size > 1) {
+              erros.push(
+                'Seu PR altera **mais de uma pasta** dentro de `entregas/`: ' +
+                [...pastas].map(p => `\`${p}\``).join(', ') +
+                '. Cada PR deve conter apenas a sua própria pasta.'
+              );
+            }
+            if (pastas.size === 0 && !fora.length && !noModelo.length) {
+              erros.push('Não encontrei nenhuma pasta de entrega no PR. Crie a pasta `entregas/nome-sobrenome/` com os 4 arquivos.');
+            }
+
+            // ---------- 2. Nome da pasta e conteúdo dos arquivos ----------
+            const pasta = pastas.size === 1 ? [...pastas][0] : null;
+
+            async function ler(dono, repositorio, ref, caminho) {
+              try {
+                const r = await github.rest.repos.getContent({
+                  owner: dono, repo: repositorio, path: caminho, ref,
+                  mediaType: { format: 'raw' },
+                });
+                return typeof r.data === 'string' ? r.data : null;
+              } catch (e) {
+                if (e.status === 404) return null;
+                throw e;
+              }
+            }
+            async function lerDoPR(caminho) {
+              const head = pr.head.repo;
+              if (head) {
+                const t = await ler(head.owner.login, head.name, pr.head.sha, caminho);
+                if (t !== null) return t;
+              }
+              return ler(owner, repo, pr.head.sha, caminho);
+            }
+            const normalizar = t => t.replace(/\r\n/g, '\n').replace(/\s+/g, ' ').trim();
+
+            if (pasta) {
+              if (!PADRAO_PASTA.test(pasta)) {
+                erros.push(
+                  `O nome da pasta \`${pasta}\` não segue o padrão. Use **letras minúsculas, sem acentos, ` +
+                  'com as palavras separadas por hífen**, no formato `nome-sobrenome` (ex.: `maria-souza`). ' +
+                  'Renomeie a pasta no seu fork.'
+                );
+              }
+
+              for (const nome of OBRIGATORIOS) {
+                const conteudo = await lerDoPR(`entregas/${pasta}/${nome}`);
+                if (conteudo === null) {
+                  erros.push(`Está faltando o arquivo **\`${nome}\`** na pasta \`entregas/${pasta}/\`. Confira também se o nome está todo em minúsculas.`);
+                  continue;
+                }
+                if (!conteudo.trim()) {
+                  erros.push(`O arquivo **\`${nome}\`** está vazio. Preencha o conteúdo antes de entregar.`);
+                  continue;
+                }
+                const modelo = await ler(owner, repo, pr.base.sha, `entregas/_modelo/${nome}`);
+                if (modelo !== null && normalizar(modelo) === normalizar(conteudo)) {
+                  erros.push(`O arquivo **\`${nome}\`** está igual ao do modelo. Substitua o conteúdo de exemplo pelo seu trabalho.`);
+                  continue;
+                }
+                if (nome === 'dashboard.html') {
+                  if (!/<html[\s>]/i.test(conteudo) || !/<\/html>/i.test(conteudo)) {
+                    erros.push('O **`dashboard.html`** precisa ter a tag de abertura `<html>` e a de fechamento `</html>`. Confira se o arquivo salvo é o HTML completo.');
+                  }
+                }
+                if (nome === 'claude.md' && !/^#+\s*Qual hist[óo]ria meu dashboard conta\??/im.test(conteudo)) {
+                  avisos.push('O `claude.md` deveria ter a seção **"Qual história meu dashboard conta?"**. Sem ela, o card da galeria fica sem a descrição.');
+                }
+                if (nome === 'skill.md') {
+                  const cab = conteudo.replace(/^﻿/, '').match(/^---\s*\n([\s\S]*?)\n---/);
+                  if (!cab || !/^name:\s*\S/m.test(cab[1]) || !/^description:\s*\S/m.test(cab[1])) {
+                    avisos.push('A `skill.md` deveria começar com um cabeçalho entre linhas `---` contendo `name:` e `description:`, como no modelo.');
+                  }
+                }
+              }
+            }
+
+            // ---------- 3. Comentário no PR ----------
+            let corpo = `${MARCADOR}\n`;
+            if (erros.length) {
+              corpo += '## ❌ A entrega precisa de ajustes\n\n';
+              corpo += 'A verificação automática encontrou os problemas abaixo. Corrija no **seu fork**. ' +
+                       'Este PR é atualizado sozinho e a verificação roda de novo. **Não é preciso abrir outro PR.**\n\n';
+              corpo += erros.map((e, i) => `${i + 1}. ${e}`).join('\n\n');
+            } else {
+              corpo += '## ✅ Entrega verificada\n\n';
+              corpo += `A pasta \`entregas/${pasta}/\` está no padrão e tem os 4 arquivos. Agora é só aguardar a aprovação do professor.`;
+            }
+            if (avisos.length) {
+              corpo += '\n\n### ⚠️ Recomendações (não impedem a entrega)\n\n' + avisos.map(a => `- ${a}`).join('\n');
+            }
+            corpo += `\n\n<sub>Verificação do commit ${pr.head.sha.slice(0, 7)}.</sub>`;
+
+            const comentarios = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: pr.number, per_page: 100,
+            });
+            const anterior = comentarios.find(c => c.user.type === 'Bot' && c.body.includes(MARCADOR));
+            if (anterior) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: anterior.id, body: corpo });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr.number, body: corpo });
+            }
+
+            if (erros.length) core.setFailed(`${erros.length} problema(s) encontrado(s) na entrega.`);

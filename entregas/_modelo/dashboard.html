@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<!--
+  MODELO — dashboard.html
+  Substitua este arquivo pelo seu dashboard.
+  Regras: um único arquivo, CSS e JS embutidos ou via CDN, dados agregados
+  embutidos no próprio HTML. Não leia arquivos locais (como o eleitos.csv).
+-->
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Modelo de dashboard</title>
+  <style>
+    :root { --fundo: #f6f7f9; --texto: #1d2733; --suave: #5b6675; --borda: #cfd6df; --destaque: #1f3a5f; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--fundo); color: var(--texto); }
+    main { max-width: 960px; margin: 0 auto; padding: 48px 16px; }
+    .aviso { display: inline-block; background: #fff4d6; color: #7a5a00; border: 1px solid #f0d58a; border-radius: 999px; padding: 4px 12px; font-size: 13px; font-weight: 600; }
+    h1 { color: var(--destaque); margin: 16px 0 8px; font-size: clamp(26px, 4vw, 38px); }
+    p { color: var(--suave); line-height: 1.6; }
+    .espaco { margin-top: 32px; min-height: 320px; border: 2px dashed var(--borda); border-radius: 12px; display: grid; place-items: center; text-align: center; padding: 24px; color: var(--suave); background: #fff; }
+  </style>
+</head>
+<body>
+  <main>
+    <span class="aviso">EXEMPLO — substitua este arquivo pelo seu dashboard</span>
+    <h1>Título do dashboard: a mensagem principal em uma frase</h1>
+    <p>Subtítulo: o contexto mínimo para o público entender o que vem a seguir.</p>
+    <div class="espaco">
+      <div>
+        <strong>Espaço reservado para as visualizações</strong><br>
+        Aqui entram os gráficos, indicadores e textos que contam a sua história.
+      </div>
+    </div>
+    <p><small>Fonte: TSE, eleições municipais de 2024 (dados/eleitos.csv).</small></p>
+  </main>
+</body>
+</html>
